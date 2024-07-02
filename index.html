@@ -1,0 +1,364 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customs Data Collection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #007BFF;
+        }
+        nav {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        nav a {
+            margin: 0 10px;
+            color: #007BFF;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        nav a:hover {
+            text-decoration: underline;
+        }
+        form {
+            background: #fff;
+            padding: 20px;
+            margin: 20px auto;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="file"] {
+            display: block;
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 100%;
+        }
+        button {
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        h2 {
+            text-align: center;
+            color: #007BFF;
+            margin-top: 40px;
+        }
+        .data-summary {
+    background: #fff;
+    padding: 20px;
+    margin: 20px auto;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    overflow: hidden; /* Ensure content is contained */
+    transition: width 0.3s ease; /* Smooth width transition */
+    width: auto; /* Default width to auto */
+}
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #007BFF;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .chart-container {
+            width: 100%;
+            margin: 20px auto;
+            text-align: center;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+        .view-more {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Customs Data Collection</h1>
+    <nav>
+        <a href="#data-summary">Data Summary</a>
+        <a href="#visualization">Visualization</a>
+    </nav>
+    <form id="data-form">
+        <label for="importExportVolumeFile">Upload Import/Export Volume Data (CSV, 2023):</label>
+        <input type="file" id="importExportVolumeFile" name="importExportVolumeFile" accept=".csv" required><br>
+        <label for="transportationDetailsFile">Upload Transportation Details (CSV, 2023):</label>
+        <input type="file" id="transportationDetailsFile" name="transportationDetailsFile" accept=".csv" required><br>
+        <button type="submit">Submit</button>
+    </form>
+
+    <h2 id="data-summary">Data Summary</h2>
+    <div id="dataSummary" class="data-summary"></div>
+
+    <h2 id="visualization">Visualization</h2>
+    <div class="chart-container">
+        <canvas id="chart"></canvas>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
+<script>
+document.getElementById('data-form').addEventListener('submit', function(event) {
+    event.preventDefault();
+
+    // Get the files from the input elements
+    const importExportVolumeFile = document.getElementById('importExportVolumeFile').files[0];
+    const transportationDetailsFile = document.getElementById('transportationDetailsFile').files[0];
+
+    // Read the files and process the data
+    if (importExportVolumeFile && transportationDetailsFile) {
+        readFile(importExportVolumeFile, function(importData) {
+            const importExportVolumeData = processCSVData(importData, 'Import/Export Volume Data');
+            readFile(transportationDetailsFile, function(transportData) {
+                const transportationDetailsData = processCSVData(transportData, 'Transportation Details Data');
+                displayDataSummary(importExportVolumeData, transportationDetailsData);
+                generateAnalysisAndVisualization(importExportVolumeData, transportationDetailsData);
+            });
+        });
+    }
+});
+
+function readFile(file, callback) {
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const fileContent = event.target.result;
+        callback(fileContent);
+    };
+    reader.readAsText(file);
+}
+
+function processCSVData(data, title) {
+    const rows = data.split('\n').filter(row => row.trim() !== ''); // Remove empty rows
+    const tableData = rows.map(row => row.split(',').map(cell => cell.trim()));
+    return { title, tableData };
+}
+
+function displayDataSummary(importData, transportData) {
+    const summaryElement = document.getElementById('dataSummary');
+    summaryElement.innerHTML = ''; // Clear previous content
+
+    const importTable = createTable(importData);
+    const transportTable = createTable(transportData);
+
+    summaryElement.appendChild(importTable);
+    summaryElement.appendChild(transportTable);
+
+    // Adjust the width of the data summary element based on the table size
+    const importTableWidth = importTable.offsetWidth;
+    const transportTableWidth = transportTable.offsetWidth;
+    const newWidth = Math.max(importTableWidth, transportTableWidth) + 'px';
+    summaryElement.style.width = newWidth;
+}
+
+function createTable(data) {
+    const MAX_INITIAL_ROWS_DISPLAY = 5;
+    const ROWS_PER_SECTION = 5;
+
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    const tbody = document.createElement('tbody');
+
+    // Create table header
+    const headerRow = document.createElement('tr');
+    data.tableData[0].forEach(header => {
+        const th = document.createElement('th');
+        th.textContent = header;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+
+    // Function to add rows to the table
+    function addRows(start, end) {
+        data.tableData.slice(start, end).forEach(row => {
+            const tr = document.createElement('tr');
+            row.forEach(cell => {
+                const td = document.createElement('td');
+                td.textContent = cell;
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+    }
+
+    // Create table body with initial rows
+    addRows(1, Math.min(1 + MAX_INITIAL_ROWS_DISPLAY, data.tableData.length));
+
+    table.appendChild(thead);
+    table.appendChild(tbody);
+
+    // Add "View More" and "View All" buttons if there are more rows
+    if (data.tableData.length > MAX_INITIAL_ROWS_DISPLAY + 1) {
+        const viewMoreButton = document.createElement('button');
+        viewMoreButton.textContent = 'View More';
+        viewMoreButton.className = 'view-more';
+
+        const viewAllButton = document.createElement('button');
+        viewAllButton.textContent = 'View All';
+        viewAllButton.className = 'view-more';
+
+        let currentEnd = MAX_INITIAL_ROWS_DISPLAY + 1;
+
+        viewMoreButton.onclick = function() {
+            addRows(currentEnd, Math.min(currentEnd + ROWS_PER_SECTION, data.tableData.length));
+            currentEnd += ROWS_PER_SECTION;
+            if (currentEnd >= data.tableData.length) {
+                viewMoreButton.style.display = 'none'; // Hide the button if no more rows to show
+                viewAllButton.style.display = 'none'; // Hide the "View All" button if all rows are shown
+            }
+        };
+
+        viewAllButton.onclick = function() {
+            addRows(currentEnd, data.tableData.length);
+            viewMoreButton.style.display = 'none'; // Hide the button after expanding
+            viewAllButton.style.display = 'none'; // Hide the "View All" button after expanding
+        };
+
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'view-more';
+        buttonContainer.appendChild(viewMoreButton);
+        buttonContainer.appendChild(viewAllButton);
+
+        table.appendChild(buttonContainer);
+    }
+
+    // Add title above the table
+    const container = document.createElement('div');
+    const title = document.createElement('h3');
+    title.textContent = data.title;
+    container.appendChild(title);
+    container.appendChild(table);
+
+    return container;
+}
+
+
+function generateAnalysisAndVisualization(importData, transportData) {
+    const analysisElement = document.createElement('div');
+    const importExportVolumeStats = analyzeImportExportVolumeData(importData.tableData);
+    const transportationDetailsStats = analyzeTransportationDetailsData(transportData.tableData);
+
+    const importExportVolumeAnalysis = createAnalysisSection('Import/Export Volume Analysis', importExportVolumeStats);
+    const transportationDetailsAnalysis = createAnalysisSection('Transportation Details Analysis', transportationDetailsStats);
+
+    analysisElement.appendChild(importExportVolumeAnalysis);
+    analysisElement.appendChild(transportationDetailsAnalysis);
+
+    document.getElementById('dataSummary').appendChild(analysisElement);
+
+    createVisualization(importExportVolumeStats, transportationDetailsStats);
+}
+
+function analyzeImportExportVolumeData(data) {
+    const headers = data[0];
+    const volumeIndex = headers.indexOf('Volume');
+    let totalVolume = 0;
+    data.slice(1).forEach(row => {
+        totalVolume += parseFloat(row[volumeIndex]);
+    });
+
+    const averageVolume = totalVolume / (data.length - 1);
+    return { totalVolume, averageVolume, risk: averageVolume > 1000 ? 'High' : 'Low', suggestion: averageVolume > 1000 ? 'Increase staff' : 'Maintain current staff' };
+}
+
+function analyzeTransportationDetailsData(data) {
+    const headers = data[0];
+    const carrierIndex = headers.indexOf('Carrier');
+    const carriers = data.slice(1).map(row => row[carrierIndex]);
+    const uniqueCarriers = [...new Set(carriers)];
+
+    const risk = uniqueCarriers.length > 5 ? 'High' : 'Low';
+    const suggestion = uniqueCarriers.length > 5 ? 'Streamline carrier selection' : 'Maintain current carriers';
+
+    return { uniqueCarriers, risk, suggestion };
+}
+
+function createAnalysisSection(title, analysisData) {
+    const section = document.createElement('div');
+    const sectionTitle = document.createElement('h4');
+    sectionTitle.textContent = title;
+    section.appendChild(sectionTitle);
+
+    const list = document.createElement('ul');
+    for (const [key, value] of Object.entries(analysisData)) {
+        const listItem = document.createElement('li');
+        listItem.textContent = `${key}: ${value}`;
+        list.appendChild(listItem);
+    }
+
+    section.appendChild(list);
+    return section;
+}
+
+function createVisualization(importStats, transportStats) {
+    const ctx = document.getElementById('chart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Import/Export Volume', 'Unique Carriers'],
+            datasets: [
+                {
+                    label: 'Total Volume',
+                    data: [importStats.totalVolume, transportStats.uniqueCarriers.length],
+                    backgroundColor: ['#007BFF', '#28a745'],
+                },
+                {
+                    label: 'Average Volume',
+                    data: [importStats.averageVolume, 0],
+                    backgroundColor: ['#ffc107', '#dc3545'],
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+</script>
